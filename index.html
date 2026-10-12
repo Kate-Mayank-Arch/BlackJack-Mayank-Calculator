@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Table Ledger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    --bg: #EDF1EE;
+    --surface: #FFFFFF;
+    --ink: #12201A;
+    --muted: #5A6A62;
+    --line: #D3DCD6;
+    --felt: #14513F;
+    --felt-ink: #E8F4ED;
+    --chip: #C23B33;
+    --chip-ink: #FFFFFF;
+    --win: #17744A;
+    --loss: #B3322D;
+    --soft: #F3F6F4;
+    --warn-bg: #FFF4DB;
+    --warn-ink: #6B4A00;
+    --focus: #1F7A5C;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0B1410;
+      --surface: #14211B;
+      --ink: #E6F0EA;
+      --muted: #94A79C;
+      --line: #263930;
+      --felt: #0F3D30;
+      --felt-ink: #E8F4ED;
+      --chip: #D0463E;
+      --win: #52C48C;
+      --loss: #F27D75;
+      --soft: #1A2A23;
+      --warn-bg: #3A2E10;
+      --warn-ink: #F3D58A;
+      --focus: #52C48C;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0B1410;
+    --surface: #14211B;
+    --ink: #E6F0EA;
+    --muted: #94A79C;
+    --line: #263930;
+    --felt: #0F3D30;
+    --felt-ink: #E8F4ED;
+    --chip: #D0463E;
+    --win: #52C48C;
+    --loss: #F27D75;
+    --soft: #1A2A23;
+    --warn-bg: #3A2E10;
+    --warn-ink: #F3D58A;
+    --focus: #52C48C;
+  }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  *, *::before, *::after { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Figtree', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 0 14px 48px; }
+  h1, h2, h3 { font-family: 'Bricolage Grotesque', 'Figtree', system-ui, sans-serif; margin: 0; line-height: 1.2; }
+  h2 { font-size: 20px; font-weight: 700; }
+  h3 { font-size: 16px; font-weight: 700; }
+  p { margin: 0; }
+  button, input, select { font: inherit; color: inherit; }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* Hero: the pot as a chip */
+  .hero {
+    background: var(--felt);
+    color: var(--felt-ink);
+    margin: 0 -14px;
+    padding: 22px 18px 24px;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  }
+  .hero .title { font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 28px; letter-spacing: -0.01em; }
+  .hero .sub { opacity: 0.85; font-size: 15px; margin-top: 4px; }
+  .hero .carry { opacity: 0.85; font-size: 13px; margin-top: 2px; }
+  .chip {
+    flex: none;
+    width: 118px; height: 118px; border-radius: 50%;
+    background: var(--chip); color: var(--chip-ink);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    border: 5px dashed rgba(255,255,255,0.85);
+    box-shadow: 0 0 0 4px var(--chip), 0 6px 0 rgba(0,0,0,0.25);
+    text-align: center; padding: 4px;
+  }
+  .chip .lbl { font-size: 13px; font-weight: 600; opacity: 0.9; line-height: 1; }
+  .chip .val { font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 26px; line-height: 1.1; margin-top: 3px; }
+  .chip.sm .val { font-size: 20px; }
+  .chip.xs .val { font-size: 16px; }
+
+  /* Tabs */
+  .tabs {
+    position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5;
+    display: flex; gap: 4px; margin: 0 -14px; padding: 8px 14px;
+    background: var(--bg); border-bottom: 1px solid var(--line);
+  }
+  .tabs button {
+    flex: 1; border: 0; background: transparent; padding: 10px 6px; border-radius: 10px;
+    font-weight: 600; color: var(--muted); cursor: pointer; min-height: 44px;
+  }
+  .tabs button[aria-selected="true"] { background: var(--felt); color: var(--felt-ink); }
+
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-top: 14px; }
+  .card > h2 + .hint { margin-top: 4px; }
+  .hint { color: var(--muted); font-size: 14px; }
+  .stack > * + * { margin-top: 12px; }
+  .row { display: flex; align-items: center; gap: 10px; }
+  .row.between { justify-content: space-between; }
+  .row.wrap-r { flex-wrap: wrap; }
+  .grow { flex: 1; min-width: 0; }
+  .divider { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
+
+  label.field { display: block; font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+  input[type="text"], select {
+    width: 100%; min-height: 44px; padding: 8px 12px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--soft);
+  }
+  input.small { width: 110px; text-align: right; }
+  .inline-field { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
+
+  .btn {
+    min-height: 44px; padding: 8px 16px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--surface); font-weight: 600; cursor: pointer;
+  }
+  .btn.primary { background: var(--felt); border-color: var(--felt); color: var(--felt-ink); }
+  .btn.danger { color: var(--loss); }
+  .btn.ghost { border-color: transparent; background: transparent; color: var(--muted); text-decoration: underline; min-height: 36px; padding: 4px 8px; }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .btn.block { width: 100%; }
+
+  .pchips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .pchip {
+    border: 2px solid var(--line); background: var(--soft); border-radius: 999px;
+    padding: 6px 14px; min-height: 44px; cursor: pointer; text-align: left; line-height: 1.2;
+  }
+  .pchip small { display: block; color: var(--muted); font-size: 12px; }
+  .pchip[aria-pressed="true"] { border-color: var(--felt); background: var(--felt); color: var(--felt-ink); }
+  .pchip[aria-pressed="true"] small { color: var(--felt-ink); opacity: 0.8; }
+
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .seg button { border: 0; background: var(--soft); padding: 8px 16px; min-height: 40px; font-weight: 600; cursor: pointer; color: var(--muted); }
+  .seg button.on { background: var(--felt); color: var(--felt-ink); }
+  .seg button.on.out { background: var(--chip); color: var(--chip-ink); }
+
+  .round-title { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+  .player-line { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; }
+
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; background: var(--soft); color: var(--muted); border: 1px solid var(--line); }
+  .badge.bust { background: var(--chip); color: var(--chip-ink); border-color: var(--chip); }
+  .badge.win { background: var(--win); color: #fff; border-color: var(--win); }
+  .badge.open { color: var(--chip); border-color: var(--chip); background: transparent; }
+
+  .scroll-x { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 15px; }
+  th { text-align: right; font-weight: 600; font-size: 13px; color: var(--muted); padding: 6px 6px; }
+  td { text-align: right; padding: 10px 6px; border-top: 1px solid var(--line); vertical-align: top; }
+  th:first-child, td:first-child { text-align: left; padding-left: 0; }
+  td:last-child, th:last-child { padding-right: 0; }
+  td .sub { display: block; font-size: 12px; color: var(--muted); }
+  .pos { color: var(--win); font-weight: 600; }
+  .neg { color: var(--loss); font-weight: 600; }
+  .zero { color: var(--muted); }
+  tr.winner td:first-child { font-weight: 700; }
+
+  .notice { padding: 10px 12px; border-radius: 10px; background: var(--soft); border: 1px solid var(--line); font-size: 15px; }
+  .notice.warn { background: var(--warn-bg); color: var(--warn-ink); border-color: transparent; }
+  .notice.good { border-color: var(--win); }
+
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+  .stat { background: var(--soft); border-radius: 10px; padding: 8px 10px; }
+  .stat .k { font-size: 12px; color: var(--muted); }
+  .stat .v { font-family: 'Bricolage Grotesque', sans-serif; font-size: 18px; font-weight: 700; }
+
+  .loan { border-top: 1px solid var(--line); padding: 10px 0; font-size: 14px; }
+  .loan:first-child { border-top: 0; }
+  details summary { cursor: pointer; font-weight: 600; min-height: 36px; display: flex; align-items: center; }
+  details ul { margin: 6px 0 0; padding-left: 20px; color: var(--muted); font-size: 14px; }
+  details li + li { margin-top: 4px; }
+
+  .empty { text-align: center; padding: 22px 8px; color: var(--muted); }
+  .empty .btn { margin-top: 10px; }
+
+  #toast {
+    position: fixed; left: 50%; transform: translateX(-50%);
+    bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+    background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 10px;
+    font-size: 15px; max-width: 90%; z-index: 20; opacity: 0; pointer-events: none;
+    transition: opacity 0.18s;
+  }
+  #toast.show { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) { #toast { transition: none; } }
+  @media (max-width: 380px) {
+    .chip { width: 100px; height: 100px; }
+    .chip .val { font-size: 22px; }
+    .hero .title { font-size: 24px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div id="app"></div>
+</div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ---------- helpers ---------- */
+  var STORE_KEY = 'table-ledger-v1';
+  var uid = function () { return Math.random().toString(36).slice(2, 9); };
+  var r2 = function (n) { return Math.round((n + Number.EPSILON) * 100) / 100; };
+  var fmt = function (n) { return r2(n).toLocaleString('en-IN', { maximumFractionDigits: 2 }); };
+  var sgn = function (n) { n = r2(n); return (n > 0 ? '+' : n < 0 ? '\u2212' : '') + fmt(Math.abs(n)); };
+  var cls = function (n) { n = r2(n); return n > 0 ? 'pos' : n < 0 ? 'neg' : 'zero'; };
+  var esc = function (s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  };
+  var num = function (v) { var n = parseFloat(String(v).replace(/,/g, '')); return isFinite(n) ? n : 0; };
+  var money = function (v) { return Math.max(0, num(v)); };
+
+  /* ---------- state ---------- */
+  function newDraft(entrants, bet) {
+    return { entrants: entrants || [], rounds: [{ bet: bet == null ? 10 : bet, status: {} }], hands: {} };
+  }
+  function defaultState() {
+    return {
+      settings: { entryFee: 10, rate: 5, type: 'simple', start: 100 },
+      players: [], gameNo: 1, carry: 0, history: [],
+      draft: newDraft([], 10), tab: 'table', undo: null
+    };
+  }
+  var state = load() || defaultState();
+  var ui = { newName: '', loanAmt: {}, repayAmt: {}, confirm: '' };
+
+  function load() {
+    try {
+      var raw = localStorage.getItem(STORE_KEY);
+      if (!raw) return null;
+      var s = JSON.parse(raw);
+      return s && s.settings && s.players ? s : null;
+    } catch (e) { return null; }
+  }
+  function save() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch (e) { /* storage may be unavailable */ }
+  }
+
+  var toastTimer;
+  function toast(msg) {
+    var t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { t.classList.remove('show'); }, 2600);
+  }
+
+  /* ---------- game maths ---------- */
+  function playerById(id) { return state.players.filter(function (p) { return p.id === id; })[0]; }
+  function debtOf(p) {
+    return r2(p.loans.reduce(function (a, l) { return a + l.principal + l.interest; }, 0));
+  }
+
+  function compute() {
+    var d = state.draft, fee = money(state.settings.entryFee);
+    var ents = d.entrants.filter(function (id) { return !!playerById(id); });
+    var paid = {}, out = {};
+    ents.forEach(function (id) { paid[id] = fee; });
+    var pot = state.carry + fee * ents.length;
+    var rounds = [];
+    d.rounds.forEach(function (r) {
+      var bet = money(r.bet);
+      var active = ents.filter(function (id) { return !out[id]; });
+      active.forEach(function (id) {
+        if ((r.status[id] || 'bet') === 'out') { out[id] = true; }
+        else { paid[id] += bet; pot += bet; }
+      });
+      rounds.push({ active: active, bet: bet });
+    });
+    var active = ents.filter(function (id) { return !out[id]; });
+    var vals = {};
+    active.forEach(function (id) {
+      var h = d.hands[id];
+      vals[id] = (h === undefined || h === '' || !isFinite(parseFloat(h))) ? null : parseFloat(h);
+    });
+
+    var status = 'incomplete', winners = [], byDefault = false;
+    if (ents.length < 2) status = 'need-players';
+    else if (active.length === 0) status = 'no-winner';
+    else if (active.length === 1) { status = 'ok'; winners = [active[0]]; byDefault = true; }
+    else if (active.some(function (id) { return vals[id] === null; })) status = 'incomplete';
+    else {
+      var valid = active.filter(function (id) { return vals[id] <= 21; });
+      if (!valid.length) status = 'no-winner';
+      else {
+        var max = Math.max.apply(null, valid.map(function (id) { return vals[id]; }));
+        winners = valid.filter(function (id) { return vals[id] === max; });
+        status = 'ok';
+      }
+    }
+
+    var cents = Math.round(pot * 100), payout = {}, share = 0, carryOut = 0;
+    if (winners.length) {
+      var shareC = Math.floor(cents / winners.length);
+      share = shareC / 100;
+      carryOut = (cents - shareC * winners.length) / 100;
+      winners.forEach(function (id) { payout[id] = share; });
+    } else if (status === 'no-winner') {
+      carryOut = r2(pot);
+    }
+    var net = {};
+    ents.forEach(function (id) { net[id] = r2((payout[id] || 0) - paid[id]); });
+    return { ents: ents, paid: paid, out: out, rounds: rounds, active: active, vals: vals,
+             status: status, winners: winners, byDefault: byDefault,
+             pot: r2(pot), share: share, payout: payout, net: net, carryOut: r2(carryOut) };
+  }
+
+  function accrue() {
+    var total = 0;
+    state.players.forEach(function (p) {
+      p.loans.forEach(function (l) {
+        if (l.principal + l.interest <= 0.004) return;
+        var base = l.type === 'compound' ? l.principal + l.interest : l.principal;
+        var i = r2(base * l.rate / 100);
+        l.interest = r2(l.interest + i);
+        l.interestCharged = r2(l.interestCharged + i);
+        total += i;
+      });
+    });
+    return r2(total);
+  }
+
+  function settle() {
+    var c = compute();
+    if (c.status !== 'ok' && c.status !== 'no-winner') return;
+    state.undo = JSON.stringify(Object.assign({}, state, { undo: null }));
+    var rows = c.ents.map(function (id) {
+      var p = playerById(id), v = c.vals[id];
+      var hand = c.out[id] ? 'out' : (c.byDefault ? 'default' : (v > 21 ? 'bust' : v));
+      p.balance = r2(p.balance + c.net[id]);
+      return { name: p.name, paid: c.paid[id], hand: hand, payout: c.payout[id] || 0, net: c.net[id] };
+    });
+    var names = c.winners.map(function (id) { return playerById(id).name; });
+    var summary = c.winners.length > 1
+      ? names.join(' and ') + ' tied and split ' + fmt(c.pot)
+      : c.winners.length === 1 ? names[0] + ' won ' + fmt(c.pot)
+      : 'No winner, ' + fmt(c.pot) + ' carried over';
+    var carryIn = state.carry;
+    state.carry = c.carryOut;
+    var interest = accrue();
+    state.history.unshift({ game: state.gameNo, pot: c.pot, summary: summary, rows: rows,
+                            carryIn: carryIn, carryOut: c.carryOut, interest: interest });
+    state.gameNo += 1;
+    var firstBet = state.draft.rounds[0] ? state.draft.rounds[0].bet : 10;
+    state.draft = newDraft(state.draft.entrants.slice(), firstBet);
+    toast('Game settled. Balances updated.');
+  }
+
+  function takeLoan(p, amt) {
+    p.balance = r2(p.balance + amt);
+    p.loans.push({ id: uid(), amount: amt, principal: amt, interest: 0, interestCharged: 0, repaid: 0,
+                   rate: money(state.settings.rate), type: state.settings.type, gameTaken: state.gameNo });
+  }
+  function repayLoans(p, amt) {
+    var left = amt;
+    p.loans.forEach(function (l) {
+      if (left <= 0) return;
+      var pi = Math.min(left, l.interest);
+      l.interest = r2(l.interest - pi); left = r2(left - pi); l.repaid = r2(l.repaid + pi);
+      var pp = Math.min(left, l.principal);
+      l.principal = r2(l.principal - pp); left = r2(left - pp); l.repaid = r2(l.repaid + pp);
+    });
+    p.balance = r2(p.balance - amt);
+  }
+
+  /* ---------- actions ---------- */
+  var actions = {
+    tab: function (d) { state.tab = d.v; },
+    toggleEntrant: function (d) {
+      var e = state.draft.entrants, i = e.indexOf(d.id);
+      if (i >= 0) e.splice(i, 1); else e.push(d.id);
+    },
+    setStatus: function (d) { state.draft.rounds[+d.r].status[d.id] = d.v; },
+    addRound: function () {
+      var last = state.draft.rounds[state.draft.rounds.length - 1];
+      state.draft.rounds.push({ bet: last.bet, status: {} });
+    },
+    removeRound: function () { if (state.draft.rounds.length > 1) state.draft.rounds.pop(); },
+    clearDraft: function () { state.draft = newDraft(state.draft.entrants.slice(), state.draft.rounds[0].bet); },
+    settle: function () { settle(); },
+    undo: function () {
+      if (!state.undo) return;
+      var tab = state.tab, prev = JSON.parse(state.undo);
+      state = prev; state.tab = tab; state.undo = null;
+      toast('Last game undone.');
+    },
+    addPlayer: function () {
+      var name = ui.newName.trim();
+      if (!name) { toast('Type a player name first.'); return 'skip'; }
+      var p = { id: uid(), name: name, balance: money(state.settings.start), loans: [] };
+      state.players.push(p);
+      state.draft.entrants.push(p.id);
+      ui.newName = '';
+    },
+    removePlayer: function (d) {
+      var p = playerById(d.id), key = 'rm:' + d.id;
+      if (debtOf(p) > 0) { toast('Clear ' + p.name + "'s loans before removing."); return 'skip'; }
+      if (ui.confirm !== key) { ui.confirm = key; return; }
+      state.players = state.players.filter(function (x) { return x.id !== d.id; });
+      state.draft.entrants = state.draft.entrants.filter(function (x) { return x !== d.id; });
+      ui.confirm = '';
+    },
+    takeLoan: function (d) {
+      var p = playerById(d.id), amt = money(ui.loanAmt[d.id]);
+      if (amt <= 0) { toast('Enter a loan amount above 0.'); return 'skip'; }
+      takeLoan(p, amt); ui.loanAmt[d.id] = '';
+      toast(p.name + ' borrowed ' + fmt(amt) + '.');
+    },
+    repay: function (d) {
+      var p = playerById(d.id), amt = money(ui.repayAmt[d.id]), debt = debtOf(p);
+      if (amt <= 0) { toast('Enter a repayment amount above 0.'); return 'skip'; }
+      if (amt > debt) { toast('That is more than the ' + fmt(debt) + ' owed.'); return 'skip'; }
+      if (amt > p.balance) { toast('Balance is only ' + fmt(p.balance) + '.'); return 'skip'; }
+      repayLoans(p, amt); ui.repayAmt[d.id] = '';
+      toast(p.name + ' repaid ' + fmt(amt) + '.');
+    },
+    resetAll: function () {
+      if (ui.confirm !== 'reset') { ui.confirm = 'reset'; return; }
+      state = defaultState(); ui.confirm = '';
+      toast('Everything reset.');
+    }
+  };
+
+  /* ---------- rendering ---------- */
+  function chipSize(s) { return s.length > 8 ? 'xs' : s.length > 6 ? 'sm' : ''; }
+
+  function viewHero(c) {
+    var p = fmt(c.pot);
+    return '<header class="hero">' +
+      '<div><h1 class="title">Game ' + state.gameNo + '</h1>' +
+      '<p class="sub">' + c.ents.length + ' at the table, entry ' + fmt(money(state.settings.entryFee)) + '</p>' +
+      (state.carry > 0 ? '<p class="carry">Includes ' + fmt(state.carry) + ' carried over</p>' : '') +
+      '</div>' +
+      '<div class="chip ' + chipSize(p) + '" aria-label="Pot ' + p + '"><span class="lbl">Pot</span><span class="val num">' + p + '</span></div>' +
+      '</header>';
+  }
+
+  function viewTabs() {
+    var t = [['table', 'Table'], ['players', 'Players and loans'], ['history', 'History']];
+    return '<nav class="tabs" role="tablist">' + t.map(function (x) {
+      return '<button role="tab" aria-selected="' + (state.tab === x[0]) + '" data-act="tab" data-v="' + x[0] + '">' + x[1] + '</button>';
+    }).join('') + '</nav>';
+  }
+
+  function viewTable(c) {
+    var h = '';
+    if (!state.players.length) {
+      return '<div class="card empty"><h2>No players yet</h2><p class="hint">Add the people playing, then come back to set up a game.</p>' +
+        '<button class="btn primary" data-act="tab" data-v="players">Add players</button></div>';
+    }
+
+    /* who is playing */
+    h += '<section class="card"><h2>Who is playing</h2><p class="hint">Tap to add or remove a player from this game.</p>' +
+      '<div class="pchips">' + state.players.map(function (p) {
+        var on = state.draft.entrants.indexOf(p.id) >= 0;
+        return '<button class="pchip" aria-pressed="' + on + '" data-act="toggleEntrant" data-id="' + p.id + '">' + esc(p.name) +
+          '<small class="num">Balance ' + fmt(p.balance) + '</small></button>';
+      }).join('') + '</div>' +
+      '<hr class="divider"><div class="inline-field"><label class="field" for="fee" style="margin:0">Entry fee per player</label>' +
+      '<input class="small num" id="fee" type="text" inputmode="decimal" data-fk="fee" data-bind="fee" value="' + esc(state.settings.entryFee) + '"></div>' +
+      '</section>';
+
+    /* rounds */
+    h += '<section class="card"><h2>Betting rounds</h2>';
+    c.rounds.forEach(function (r, i) {
+      h += (i ? '<hr class="divider">' : '<div style="height:10px"></div>') +
+        '<div class="round-title"><h3>' + (i === 0 ? 'Round 1: after the first 2 cards' : 'Round ' + (i + 1) + ': extra card') + '</h3></div>' +
+        (i === 0 ? '' : '<p class="hint">Everyone still in adds this bet again, or goes out.</p>') +
+        '<div class="inline-field" style="margin-top:8px"><label class="field" style="margin:0" for="bet' + i + '">Bet per player</label>' +
+        '<input class="small num" id="bet' + i + '" type="text" inputmode="decimal" data-fk="bet' + i + '" data-bind="bet:' + i + '" value="' + esc(state.draft.rounds[i].bet) + '"></div>';
+      if (!r.active.length) h += '<p class="hint" style="margin-top:8px">No one is left in this round.</p>';
+      r.active.forEach(function (id) {
+        var st = state.draft.rounds[i].status[id] || 'bet';
+        h += '<div class="player-line"><span>' + esc(playerById(id).name) + '</span>' +
+          '<div class="seg" role="group" aria-label="' + esc(playerById(id).name) + ' round ' + (i + 1) + '">' +
+          '<button class="' + (st === 'bet' ? 'on' : '') + '" aria-pressed="' + (st === 'bet') + '" data-act="setStatus" data-r="' + i + '" data-id="' + id + '" data-v="bet">Bet</button>' +
+          '<button class="' + (st === 'out' ? 'on out' : '') + '" aria-pressed="' + (st === 'out') + '" data-act="setStatus" data-r="' + i + '" data-id="' + id + '" data-v="out">Out</button>' +
+          '</div></div>';
+      });
+    });
+    var canAdd = c.active.length > 1;
+    h += '<div class="row wrap-r" style="margin-top:14px">' +
+      '<button class="btn" data-act="addRound"' + (canAdd ? '' : ' disabled') + '>Add extra card round</button>' +
+      (c.rounds.length > 1 ? '<button class="btn ghost" data-act="removeRound">Remove last round</button>' : '') +
+      '</div></section>';
+
+    /* final hands */
+    h += '<section class="card"><h2>Final hands</h2>';
+    if (c.ents.length < 2) {
+      h += '<p class="hint">Pick at least 2 players to start.</p>';
+    } else if (!c.active.length) {
+      h += '<p class="hint">Everyone is out. Nothing to enter.</p>';
+    } else if (c.active.length === 1) {
+      h += '<p class="hint">Only ' + esc(playerById(c.active[0]).name) + ' is still in, so they win the pot without showing a hand.</p>';
+    } else {
+      h += '<p class="hint">Enter each remaining player\u2019s card total. Over 21 is a bust.</p>';
+      c.active.forEach(function (id) {
+        var v = c.vals[id], raw = state.draft.hands[id] === undefined ? '' : state.draft.hands[id];
+        h += '<div class="player-line"><span>' + esc(playerById(id).name) + (v !== null && v > 21 ? ' <span class="badge bust">Bust</span>' : '') + '</span>' +
+          '<input class="small num" type="text" inputmode="numeric" aria-label="' + esc(playerById(id).name) + ' hand total" data-fk="hand' + id + '" data-bind="hand:' + id + '" value="' + esc(raw) + '" placeholder="Total"></div>';
+      });
+    }
+    h += '</section>';
+
+    /* result */
+    h += '<section class="card"><h2>Result</h2><div class="stack" style="margin-top:10px">';
+    var msg = '', kind = '';
+    if (c.status === 'need-players') { msg = 'Pick at least 2 players to see the result.'; }
+    else if (c.status === 'incomplete') { msg = 'Enter every remaining hand total to see who wins.'; }
+    else if (c.status === 'no-winner') { msg = 'No winner. Everyone is out or bust, so the pot of ' + fmt(c.pot) + ' carries to the next game.'; kind = 'warn'; }
+    else {
+      var names = c.winners.map(function (id) { return esc(playerById(id).name); });
+      msg = c.winners.length > 1
+        ? '<strong>' + names.join(' and ') + '</strong> tied with ' + c.vals[c.winners[0]] + '. They split the pot, ' + fmt(c.share) + ' each.'
+        : '<strong>' + names[0] + '</strong> wins the pot of ' + fmt(c.pot) + '.';
+      kind = 'good';
+      if (c.carryOut > 0) msg += ' ' + fmt(c.carryOut) + ' left over carries forward.';
+    }
+    h += '<p class="notice ' + kind + '">' + msg + '</p>';
+
+    if (c.ents.length) {
+      h += '<div class="scroll-x"><table><thead><tr><th>Player</th><th>Paid in</th><th>Hand</th><th>Net</th></tr></thead><tbody>';
+      c.ents.forEach(function (id) {
+        var p = playerById(id), v = c.vals[id], isW = c.winners.indexOf(id) >= 0;
+        var hand = c.out[id] ? '<span class="badge">Out</span>'
+          : c.byDefault ? '<span class="badge">Last in</span>'
+          : v === null ? '<span class="zero">\u2013</span>'
+          : v > 21 ? '<span class="badge bust">Bust ' + v + '</span>' : v;
+        var after = r2(p.balance + c.net[id]);
+        var showNet = c.status === 'ok' || c.status === 'no-winner';
+        h += '<tr class="' + (isW ? 'winner' : '') + '"><td>' + esc(p.name) + (isW ? ' <span class="badge win">Winner</span>' : '') +
+          (showNet && after < 0 ? '<span class="sub neg">Balance would be ' + fmt(after) + '. Needs a loan.</span>' : '') + '</td>' +
+          '<td class="num">' + fmt(c.paid[id]) + '</td><td class="num">' + hand + '</td>' +
+          '<td class="num ' + (showNet ? cls(c.net[id]) : 'zero') + '">' + (showNet ? sgn(c.net[id]) : '\u2013') +
+          (showNet && c.payout[id] ? '<span class="sub">gets ' + fmt(c.payout[id]) + '</span>' : '') + '</td></tr>';
+      });
+      h += '</tbody></table></div>';
+    }
+    var ready = c.status === 'ok' || c.status === 'no-winner';
+    h += '<button class="btn primary block" data-act="settle"' + (ready ? '' : ' disabled') + '>Settle game and update balances</button>' +
+      '<div class="row between">' +
+      '<button class="btn ghost" data-act="clearDraft">Clear this game</button>' +
+      (state.undo ? '<button class="btn ghost" data-act="undo">Undo last settled game</button>' : '<span></span>') +
+      '</div></div></section>';
+
+    h += '<section class="card"><details><summary>How a game is counted</summary><ul>' +
+      '<li>Every player pays the entry fee into the pot.</li>' +
+      '<li>After seeing 2 cards, each player bets or goes out. Going out forfeits everything already paid.</li>' +
+      '<li>Each extra card round makes everyone still in add the bet again, or go out.</li>' +
+      '<li>The highest total of 21 or less wins the pot. A tie splits it equally.</li>' +
+      '<li>If one player is left, they win. If everyone is out or bust, the pot carries to the next game.</li>' +
+      '<li>Net is what a player gets back minus everything they paid in.</li></ul></details></section>';
+    return h;
+  }
+
+  function viewLoan(l) {
+    var owed = r2(l.principal + l.interest), open = owed > 0.004;
+    return '<div class="loan"><div class="row between"><strong class="num">Borrowed ' + fmt(l.amount) + ' in game ' + l.gameTaken + '</strong>' +
+      (open ? '<span class="badge open">Open</span>' : '<span class="badge">Cleared</span>') + '</div>' +
+      '<p class="hint num">' + fmt(l.rate) + '% per game, ' + l.type + '. Interest charged ' + fmt(l.interestCharged) +
+      ', repaid ' + fmt(l.repaid) + (open ? ', owes ' + fmt(owed) : '') + '.</p></div>';
+  }
+
+  function viewPlayers() {
+    var s = state.settings, h = '';
+    h += '<section class="card"><h2>Add a player</h2>' +
+      '<div class="row" style="margin-top:10px"><div class="grow"><input type="text" id="newName" aria-label="Player name" placeholder="Player name" data-fk="newName" data-bind="newName" value="' + esc(ui.newName) + '"></div>' +
+      '<button class="btn primary" data-act="addPlayer">Add</button></div>' +
+      '<div class="inline-field" style="margin-top:12px"><label class="field" style="margin:0" for="start">Starting balance for new players</label>' +
+      '<input class="small num" id="start" type="text" inputmode="decimal" data-fk="start" data-bind="start" value="' + esc(s.start) + '"></div></section>';
+
+    h += '<section class="card"><h2>Loan terms</h2><p class="hint">Interest is added to every open loan each time a game is settled. Changes apply to new loans only.</p>' +
+      '<div class="stack" style="margin-top:12px">' +
+      '<div class="inline-field"><label class="field" style="margin:0" for="rate">Interest per game (%)</label>' +
+      '<input class="small num" id="rate" type="text" inputmode="decimal" data-fk="rate" data-bind="rate" value="' + esc(s.rate) + '"></div>' +
+      '<div class="inline-field"><label class="field" style="margin:0" for="type">Interest type</label>' +
+      '<select id="type" data-fk="type" data-bind="type" style="width:auto"><option value="simple"' + (s.type === 'simple' ? ' selected' : '') + '>Simple (on amount borrowed)</option>' +
+      '<option value="compound"' + (s.type === 'compound' ? ' selected' : '') + '>Compound (on amount owed)</option></select></div>' +
+      '</div></section>';
+
+    if (!state.players.length) {
+      return h + '<div class="card empty"><p>No players yet. Add the first one above.</p></div>';
+    }
+
+    var sorted = state.players.slice().sort(function (a, b) { return (b.balance - debtOf(b)) - (a.balance - debtOf(a)); });
+    sorted.forEach(function (p) {
+      var debt = debtOf(p), worth = r2(p.balance - debt), key = 'rm:' + p.id;
+      h += '<section class="card"><div class="row between"><h2>' + esc(p.name) + '</h2>' +
+        '<button class="btn ghost danger" data-act="removePlayer" data-id="' + p.id + '">' + (ui.confirm === key ? 'Tap again to remove' : 'Remove') + '</button></div>' +
+        '<div class="stats"><div class="stat"><div class="k">Balance</div><div class="v num ' + (p.balance < 0 ? 'neg' : '') + '">' + fmt(p.balance) + '</div></div>' +
+        '<div class="stat"><div class="k">Owes</div><div class="v num ' + (debt > 0 ? 'neg' : '') + '">' + fmt(debt) + '</div></div>' +
+        '<div class="stat"><div class="k">Net worth</div><div class="v num ' + cls(worth) + '">' + fmt(worth) + '</div></div></div>' +
+        '<div class="row" style="margin-top:14px"><div class="grow"><input type="text" inputmode="decimal" aria-label="Loan amount for ' + esc(p.name) + '" placeholder="Loan amount" data-fk="loan' + p.id + '" data-bind="loan:' + p.id + '" value="' + esc(ui.loanAmt[p.id] || '') + '"></div>' +
+        '<button class="btn" data-act="takeLoan" data-id="' + p.id + '">Take loan</button></div>' +
+        '<div class="row" style="margin-top:8px"><div class="grow"><input type="text" inputmode="decimal" aria-label="Repayment for ' + esc(p.name) + '" placeholder="Repay amount" data-fk="repay' + p.id + '" data-bind="repay:' + p.id + '" value="' + esc(ui.repayAmt[p.id] || '') + '"></div>' +
+        '<button class="btn" data-act="repay" data-id="' + p.id + '">Repay</button></div>' +
+        '<p class="hint" style="margin-top:6px">Repayments clear interest first, then the oldest loan.</p>';
+      if (p.loans.length) {
+        h += '<hr class="divider"><h3 style="margin-bottom:4px">Loans taken</h3>' + p.loans.slice().reverse().map(viewLoan).join('');
+      }
+      h += '</section>';
+    });
+    return h;
+  }
+
+  function viewHistory() {
+    var h = '';
+    if (!state.history.length) {
+      h += '<div class="card empty"><h2>No games settled yet</h2><p class="hint">Finished games and who won what show up here.</p></div>';
+    }
+    state.history.forEach(function (g) {
+      h += '<section class="card"><div class="row between"><h2>Game ' + g.game + '</h2><span class="hint num">Pot ' + fmt(g.pot) + '</span></div>' +
+        '<p style="margin-top:4px">' + esc(g.summary) + '.</p>' +
+        '<div class="scroll-x"><table style="margin-top:8px"><thead><tr><th>Player</th><th>Paid in</th><th>Hand</th><th>Net</th></tr></thead><tbody>' +
+        g.rows.map(function (r) {
+          var hand = r.hand === 'out' ? 'Out' : r.hand === 'bust' ? 'Bust' : r.hand === 'default' ? 'Last in' : r.hand;
+          return '<tr><td>' + esc(r.name) + '</td><td class="num">' + fmt(r.paid) + '</td><td class="num">' + hand + '</td><td class="num ' + cls(r.net) + '">' + sgn(r.net) + '</td></tr>';
+        }).join('') + '</tbody></table></div>' +
+        (g.carryIn > 0 ? '<p class="hint" style="margin-top:6px">Started with ' + fmt(g.carryIn) + ' carried over.</p>' : '') +
+        (g.interest > 0 ? '<p class="hint" style="margin-top:6px">Loan interest added after this game: ' + fmt(g.interest) + '.</p>' : '') +
+        '</section>';
+    });
+    h += '<div style="margin-top:16px"><button class="btn danger block" data-act="resetAll">' +
+      (ui.confirm === 'reset' ? 'Tap again to erase all players, loans and history' : 'Reset everything') + '</button></div>';
+    return h;
+  }
+
+  var app = document.getElementById('app');
+  function render() {
+    var c = compute();
+    var ae = document.activeElement, fk = ae && ae.dataset ? ae.dataset.fk : null, pos = null;
+    try { pos = ae.selectionStart; } catch (e) { pos = null; }
+    var body = state.tab === 'players' ? viewPlayers() : state.tab === 'history' ? viewHistory() : viewTable(c);
+    app.innerHTML = viewHero(c) + viewTabs() + body;
+    if (fk) {
+      var el = app.querySelector('[data-fk="' + fk + '"]');
+      if (el) {
+        el.focus();
+        try { if (pos !== null) el.setSelectionRange(pos, pos); } catch (e) { /* not supported */ }
+      }
+    }
+  }
+  function commit() { save(); render(); }
+
+  app.addEventListener('click', function (e) {
+    var t = e.target.closest('[data-act]');
+    if (!t || t.disabled) return;
+    var fn = actions[t.dataset.act];
+    if (!fn) return;
+    var keepConfirm = t.dataset.act === 'removePlayer' || t.dataset.act === 'resetAll';
+    var res = fn(t.dataset);
+    if (!keepConfirm) ui.confirm = '';
+    if (res === 'skip') { render(); return; }
+    commit();
+  });
+
+  app.addEventListener('input', function (e) {
+    var t = e.target, b = t.dataset ? t.dataset.bind : null;
+    if (!b) return;
+    var parts = b.split(':'), k = parts[0], id = parts[1];
+    if (k === 'newName') { ui.newName = t.value; return; }
+    if (k === 'loan') { ui.loanAmt[id] = t.value; return; }
+    if (k === 'repay') { ui.repayAmt[id] = t.value; return; }
+    if (k === 'fee') state.settings.entryFee = t.value;
+    else if (k === 'start') state.settings.start = t.value;
+    else if (k === 'rate') state.settings.rate = t.value;
+    else if (k === 'type') state.settings.type = t.value;
+    else if (k === 'bet') state.draft.rounds[+id].bet = t.value;
+    else if (k === 'hand') state.draft.hands[id] = t.value;
+    commit();
+  });
+
+  app.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter') return;
+    var t = e.target;
+    if (t.id === 'newName') { actions.addPlayer({}); commit(); }
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
