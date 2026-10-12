@@ -146,6 +146,13 @@
   input.small { width: 104px; text-align: right; flex: none; }
 
   .inline-field { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
+  .inline-field select { min-width: 170px; max-width: 62%; }
+  .inline-field .field { max-width: 60%; }
+  @media (max-width: 380px) {
+    .inline-field { flex-wrap: wrap; }
+    .inline-field select { min-width: 0; max-width: none; width: 100%; }
+    .inline-field .field { max-width: none; width: 100%; }
+  }
 
   .btn {
     min-height: 46px; padding: 8px 16px; border-radius: 12px; border: 1px solid var(--line);
@@ -204,7 +211,7 @@
 
   .notice { padding: 10px 12px; border-radius: 10px; background: var(--soft); border: 1px solid var(--line); font-size: 14px; }
   .notice.warn { background: var(--warn-bg); color: var(--warn-ink); border-color: transparent; }
-  .notice.good { border-color: var(--win); }
+  .notice.good { border-color: var(--win); background: linear-gradient(135deg, rgba(23,116,74,0.12), var(--soft)); }
 
   .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
   .stat { background: var(--soft); border-radius: 10px; padding: 8px 10px; }
@@ -241,6 +248,34 @@
   }
   #toast.show { opacity: 1; }
   @media (prefers-reduced-motion: reduce) { #toast { transition: none; } }
+  input:focus, select:focus { border-color: var(--focus); }
+  input.short { border-color: var(--loss) !important; }
+  .avatar {
+    display: inline-flex; width: 20px; height: 20px; border-radius: 50%;
+    color: #fff; font-size: 11px; font-weight: 700;
+    align-items: center; justify-content: center; margin-right: 7px;
+    vertical-align: -4px; flex: none;
+  }
+  .testout {
+    margin-top: 10px; padding: 10px; background: var(--soft);
+    border: 1px solid var(--line); border-radius: 10px; font-size: 12px; line-height: 1.5;
+    white-space: pre-wrap; word-break: break-word; max-height: 280px; overflow: auto;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  .sect { padding: 0; overflow: hidden; }
+  .sect > summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; cursor: pointer; list-style: none; min-height: 48px; }
+  .sect > summary::-webkit-details-marker { display: none; }
+  .sect > summary::after { content: '\25B8'; color: var(--muted); margin-left: auto; transition: transform 0.15s; flex: none; }
+  .sect[open] > summary::after { transform: rotate(90deg); }
+  .sect .stitle { font-family: 'Bricolage Grotesque', 'Figtree', system-ui, sans-serif; font-weight: 700; font-size: 17px; }
+  .sect .coin { flex: none; background: var(--chip); color: var(--chip-ink); border-radius: 999px; padding: 2px 10px; font-weight: 700; font-size: 12px; max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sectbody { padding: 2px 14px 14px; }
+  @media (prefers-reduced-motion: reduce) { .sect > summary::after { transition: none; } }
+  @media (max-width: 380px) {
+    .raiser-row { grid-template-columns: 1fr; }
+    .bets { flex-wrap: wrap; justify-content: flex-start; }
+    .bets input { width: 72px; }
+  }
   input[type="text"] { -webkit-user-select: text; user-select: text; }
 </style>
 </head>
@@ -257,7 +292,10 @@
   var STORE_KEY = 'table-ledger-v2';
   var uid = function () { return Math.random().toString(36).slice(2, 9); };
   var r2 = function (n) { return Math.round((n + Number.EPSILON) * 100) / 100; };
-  var fmt = function (n) { return r2(n).toLocaleString('en-IN', { maximumFractionDigits: 2 }); };
+  var fmt = function (n) {
+    var cur = state && state.settings && state.settings.cur ? state.settings.cur : '';
+    return cur + r2(n).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+  };
   var sgn = function (n) { n = r2(n); return (n > 0 ? '+' : n < 0 ? '\u2212' : '') + fmt(Math.abs(n)); };
   var cls = function (n) { n = r2(n); return n > 0 ? 'pos' : n < 0 ? 'neg' : 'zero'; };
   var esc = function (s) {
@@ -275,9 +313,10 @@
   function newDraft(entrants) { return { entrants: entrants || [], rounds: [newRound()], hands: {} }; }
   function defaultState() {
     return {
-      settings: { entryFee: 10, firstBet: 10, rate: 5, type: 'simple', start: 100 },
+      settings: { entryFee: 10, firstBet: 10, rate: 5, type: 'simple', start: 100, cur: '' },
       players: [], gameNo: 1, carry: 0, history: [],
-      draft: newDraft([]), tab: 'table', undo: null
+      draft: newDraft([]), tab: 'table', undo: null,
+      view: { sections: { players: true, rounds: true, hands: false, result: false } }
     };
   }
   var state = load() || defaultState();
@@ -290,6 +329,10 @@
       if (!raw) return null;
       var s = JSON.parse(raw);
       if (s && s.settings && s.players) {
+        if (s.settings.cur === undefined) s.settings.cur = '';
+        if (s.settings.firstBet === undefined) s.settings.firstBet = 10;
+        if (!s.view) s.view = { sections: {} };
+        s.view.sections = Object.assign({ players: true, rounds: true, hands: false, result: false }, s.view.sections);
         (s.draft.rounds || []).forEach(function (r) {
           r.amount = r.amount || {}; r.status = r.status || {};
           r.raise = money(r.raise) || 10; r.raiserId = r.raiserId || null; r.type = r.type || 'bet';
@@ -315,6 +358,21 @@
   function playerById(id) { return state.players.filter(function (p) { return p.id === id; })[0]; }
   function debtOf(p) {
     return r2(p.loans.reduce(function (a, l) { return a + l.principal + l.interest; }, 0));
+  }
+
+  // cumulative highest bet made up to (not including) round idx — the strict minimum for that round's raise
+  function prevHighestBet(idx) {
+    var hi = 0;
+    for (var j = 0; j < idx; j++) {
+      var r = state.draft.rounds[j];
+      if (r.type === 'bet') {
+        state.draft.entrants.forEach(function (id) {
+          var raw = r.amount[id];
+          hi = Math.max(hi, (raw === undefined || raw === '') ? money(state.settings.firstBet) : money(raw));
+        });
+      } else { hi = Math.max(hi, money(r.raise)); }
+    }
+    return hi;
   }
 
   function compute() {
@@ -390,9 +448,30 @@
     }
     var net = {};
     ents.forEach(function (id) { net[id] = r2((payout[id] || 0) - paid[id]); });
+
+    // strict escalating-raise rule violations (settle is blocked until this list is empty)
+    var violations = [];
+    d.rounds.forEach(function (r, i) {
+      if (r.type !== 'raise') return;
+      var raise = money(r.raise);
+      var mn = prevHighestBet(i);
+      if (raise > 0 && raise < mn) {
+        violations.push('Round ' + (i + 1) + ': raise ' + fmt(raise) + ' is below the previous highest bet ' + fmt(mn));
+      } else if (raise > 0) {
+        rounds[i].active.forEach(function (id) {
+          if (id === r.raiserId) return;
+          var raw = r.amount[id];
+          if (raw !== undefined && raw !== '' && money(raw) < raise) {
+            var nm = playerById(id) ? playerById(id).name : 'Player';
+            violations.push('Round ' + (i + 1) + ': ' + nm + ' added ' + fmt(money(raw)) + ', must be at least ' + fmt(raise));
+          }
+        });
+      }
+    });
     return { ents: ents, paid: paid, out: out, rounds: rounds, active: active, vals: vals,
              status: status, winners: winners, byDefault: byDefault,
-             pot: r2(pot), share: share, payout: payout, net: net, carryOut: r2(carryOut) };
+             pot: r2(pot), share: share, payout: payout, net: net, carryOut: r2(carryOut),
+             violations: violations };
   }
 
   // what a player has put in before the given round (for the little "already in" label)
@@ -431,7 +510,7 @@
 
   function settle() {
     var c = compute();
-    if (c.status !== 'ok' && c.status !== 'no-winner') return;
+    if ((c.status !== 'ok' && c.status !== 'no-winner') || (c.violations && c.violations.length)) return;
     state.undo = JSON.stringify(Object.assign({}, state, { undo: null }));
     var rows = c.ents.map(function (id) {
       var p = playerById(id), v = c.vals[id];
@@ -471,6 +550,123 @@
     p.balance = r2(p.balance - amt);
   }
 
+  /* ---------- self-test: 200 random games, pot conservation ---------- */
+  function randomName(i) {
+    return ['Asha', 'Bilal', 'Chen', 'Divya', 'Ekta', 'Farid', 'Gita', 'Hema'][i % 8] + (i > 7 ? String(i) : '');
+  }
+  function randomLoan(s, pl) {
+    var amt = 20 + Math.floor(Math.random() * 80);
+    pl.balance = r2(pl.balance + amt);
+    pl.loans.push({ id: uid(), amount: amt, principal: amt, interest: 0, interestCharged: 0, repaid: 0,
+                    rate: money(s.settings.rate), type: Math.random() < 0.5 ? 'simple' : 'compound', gameTaken: s.gameNo });
+  }
+  function runSelfTest() {
+    var snap = JSON.stringify(state);
+    var games = 200, pass = 0, failed = [];
+    // Grand totals: per-game NEW money in (pot minus carry-in) vs paid out; carry telescopes across games.
+    var totalIn = 0, totalOut = 0, lastCarry = 0, seed = 0;
+    try {
+      for (var g = 1; g <= games; g++) {
+        var s = defaultState();
+        var n = 2 + Math.floor(Math.random() * 5);
+        var ids = [];
+        for (var p = 0; p < n; p++) {
+          var pl = { id: uid(), name: randomName(p), balance: 500 + Math.floor(Math.random() * 500), loans: [] };
+          s.players.push(pl); ids.push(pl.id);
+          if (Math.random() < 0.3) { s.gameNo = g; randomLoan(s, pl); }
+        }
+        s.settings.entryFee = 1 + Math.floor(Math.random() * 40);
+        s.settings.firstBet = 1 + Math.floor(Math.random() * 40);
+        if (g === 1) { seed = Math.floor(Math.random() * 50); s.carry = seed; }
+        else { s.carry = lastCarry; }
+        s.draft = newDraft(ids);
+
+        var r0 = s.draft.rounds[0];
+        ids.forEach(function (id) {
+          var roll = Math.random();
+          if (roll < 0.2) { r0.status[id] = 'fold'; }
+          else if (roll < 0.5) { r0.amount[id] = ''; }
+          else { r0.amount[id] = String(1 + Math.floor(Math.random() * 60)); }
+        });
+        var extra = Math.floor(Math.random() * 4);
+        for (var e = 1; e <= extra; e++) {
+          var prev = s.draft.rounds[e - 1];
+          var prevAmt = prev.type === 'bet'
+            ? Math.max.apply(null, ids.map(function (id) {
+                var raw = prev.amount[id];
+                return (raw === undefined || raw === '') ? money(s.settings.firstBet) : money(raw);
+              }))
+            : money(prev.raise);
+          var nr = { type: 'raise', raise: prevAmt + Math.floor(Math.random() * 30),
+                     raiserId: ids[Math.floor(Math.random() * ids.length)], status: {}, amount: {} };
+          s.draft.rounds.push(nr);
+          ids.forEach(function (id) {
+            if (nr.raiserId === id) return;
+            var roll = Math.random();
+            if (roll < 0.3) { nr.status[id] = 'fold'; }
+            else if (roll < 0.6) { nr.amount[id] = ''; }
+            else { nr.amount[id] = String(nr.raise + Math.floor(Math.random() * 40)); }
+          });
+        }
+        ids.forEach(function (id) {
+          s.draft.hands[id] = String(2 + Math.floor(Math.random() * 24));
+        });
+
+        state = s;
+        var beforeBal = {};
+        s.players.forEach(function (x) { beforeBal[x.id] = x.balance; });
+        var carryIn = state.carry;
+        var c = compute();
+        if (c.status !== 'ok' && c.status !== 'no-winner') { failed.push('Game ' + g + ': could not settle (status ' + c.status + ')'); break; }
+
+        settle();
+
+        var probs = [];
+        var paidSum = 0, paySum = 0;
+        c.ents.forEach(function (id) { paidSum = r2(paidSum + c.paid[id]); paySum = r2(paySum + (c.payout[id] || 0)); });
+        var outflow = r2(paySum + c.carryOut);
+        if (Math.abs(r2(c.pot) - outflow) > 0.005) probs.push('pot in ' + fmt(c.pot) + ' != out ' + fmt(outflow));
+        if (Math.abs(state.carry - c.carryOut) > 0.005) probs.push('carry not advanced');
+        c.ents.forEach(function (id) {
+          var pl = null;
+          state.players.forEach(function (x) { if (x.id === id) pl = x; });
+          var delta = r2(pl.balance - beforeBal[id]);
+          if (Math.abs(delta - c.net[id]) > 0.005) probs.push(pl.name + ' balance moved ' + fmt(delta) + ', expected net ' + fmt(c.net[id]));
+        });
+        if (c.status === 'ok' && !c.byDefault && c.winners.length) {
+          var maxv = -1;
+          c.active.forEach(function (id) { if (c.vals[id] <= 21 && c.vals[id] > maxv) maxv = c.vals[id]; });
+          var expectIds = c.active.filter(function (id) { return c.vals[id] <= 21 && c.vals[id] === maxv; }).join(',');
+          if (c.winners.join(',') !== expectIds) probs.push('wrong winner set');
+          if (maxv > 21) probs.push('winner busts with ' + maxv);
+        }
+        if (probs.length) { failed.push('Game ' + g + ': ' + probs.join('; ')); }
+        else { pass++; totalIn = r2(totalIn + c.pot - carryIn); totalOut = r2(totalOut + paySum); }
+        lastCarry = state.carry;
+      }
+    } catch (err) {
+      failed.push('Crashed after ' + pass + ' passing games: ' + err.message);
+    } finally {
+      state = JSON.parse(snap);
+      save();
+    }
+    var msg;
+    var el;  // after restore, the final render() has already written the Players tab DOM, so testOut is live again
+    if (!failed.length) {
+      msg = '\u2713 ' + pass + '/' + games + ' random games passed.\n' +
+        'Money conserved over the whole run:\n' +
+        '  in:  ' + fmt(r2(totalIn + seed)) + ' (entry fees + bets + ' + fmt(seed) + ' starting carry)\n' +
+        '  out: ' + fmt(totalOut) + ' paid to winners + ' + fmt(lastCarry) + ' carried forward\n';
+    } else {
+      msg = '\u2717 ' + failed.length + ' of ' + games + ' games failed:\n' + failed.join('\n');
+    }
+    el = document.getElementById('testOut');
+    if (el) el.textContent = msg;
+    // probe for headless verification (visible in <title> after --dump-dom)
+    document.title = 'ST pass=' + pass + ' fail=' + failed.length + (failed[0] ? ' first: ' + failed[0].slice(0, 120) : '');
+    toast(failed.length ? 'Self-test FAILED \u2014 details below the button.' : 'Self-test passed. All ' + pass + ' random games balanced.');
+  }
+
   /* ---------- actions ---------- */
   var actions = {
     tab: function (d) { state.tab = d.v; },
@@ -494,14 +690,9 @@
     setRaiser: function (d) { state.draft.rounds[+d.r].raiserId = d.id; },
     addRound: function () {
       var d = state.draft;
-      var last = d.rounds[d.rounds.length - 1];
-      var base = last.type === 'bet'
-        ? Math.max.apply(null, d.entrants.map(function (id) {
-            var raw = last.amount[id];
-            return (raw === undefined || raw === '') ? money(state.settings.firstBet) : money(raw);
-          }).concat([money(state.settings.firstBet)]))
-        : money(last.raise);
-      var nr = { type: 'raise', raise: base, raiserId: null, status: {}, amount: {} };
+      var nr = { type: 'raise', raise: 0, raiserId: null, status: {}, amount: {} };
+      // strict rule: a new raise starts at the cumulative highest bet so far
+      nr.raise = prevHighestBet(d.rounds.length);
       var stillIn = d.entrants.filter(function (id) {
         // someone is still in if they never folded in a prior round
         return !d.rounds.some(function (rr, i) {
@@ -513,8 +704,31 @@
       d.rounds.push(nr);
     },
     removeRound: function () { if (state.draft.rounds.length > 1) state.draft.rounds.pop(); },
+    fixRaises: function () {
+      var hi = 0;
+      state.draft.rounds.forEach(function (r) {
+        if (r.type === 'bet') {
+          state.draft.entrants.forEach(function (id) {
+            var raw = r.amount[id];
+            hi = Math.max(hi, (raw === undefined || raw === '') ? money(state.settings.firstBet) : money(raw));
+          });
+          return;
+        }
+        var raise = money(r.raise);
+        if (raise < hi) { r.raise = String(hi); raise = hi; }
+        state.draft.entrants.forEach(function (id) {
+          if (id === r.raiserId) return;
+          if ((r.status[id] || 'call') === 'fold') return;
+          var raw = r.amount[id];
+          if (raw !== undefined && raw !== '' && money(raw) < raise) r.amount[id] = String(raise);
+        });
+        hi = Math.max(hi, raise);
+      });
+      toast('Raises adjusted to the rule minimums.');
+    },
     clearDraft: function () { state.draft = newDraft(state.draft.entrants.slice()); },
     settle: function () { settle(); },
+    selfTest: function () { runSelfTest(); return 'skip'; },
     undo: function () {
       if (!state.undo) return;
       var tab = state.tab, prev = JSON.parse(state.undo);
@@ -586,6 +800,30 @@
 
   function statusOf(r, id, fallback) { return r.status[id] || fallback; }
 
+  // opening state for a persisted collapsible section
+  function sectOpen(key) { return state.view ? !!state.view.sections[key] : true; }
+  function sectCoin(key, c) {
+    if (key === 'players') return c.ents.length ? c.ents.length + ' in' : '';
+    if (key === 'rounds') return fmt(c.pot);
+    if (key === 'hands') {
+      var n = 0;
+      c.active.forEach(function (id) { if (c.vals[id] !== null) n++; });
+      return n ? n + '/' + c.active.length : '';
+    }
+    if (key === 'result') {
+      if (c.status === 'ok') return c.winners.length ? 'Winner' : '';
+      if (c.status === 'no-winner') return 'Carry';
+      if (c.status === 'incomplete') return 'Waiting';
+    }
+    return '';
+  }
+  function sect(key, title, coin, bodyHtml) {
+    var co = coin ? '<span class="coin num">' + coin + '</span>' : '';
+    return '<details class="card sect" data-sect="' + key + '"' + (sectOpen(key) ? ' open' : '') + '>' +
+      '<summary><span class="stitle">' + title + '</span>' + co + '</summary>' +
+      '<div class="sectbody">' + bodyHtml + '</div></details>';
+  }
+
   function viewTable(c) {
     var d = state.draft;
     var h = '';
@@ -595,131 +833,131 @@
     }
 
     /* who is playing */
-    h += '<section class="card"><h2>Who is playing</h2><p class="hint">Tap to add or remove a player from this game. Everyone pays the same entry fee.</p>' +
+    var playersBody = '<p class="hint">Tap to add or remove a player from this game. Everyone pays the same entry fee.</p>' +
       '<div class="pchips">' + state.players.map(function (p) {
         var on = d.entrants.indexOf(p.id) >= 0;
         return '<button class="pchip" aria-pressed="' + on + '" data-act="toggleEntrant" data-id="' + p.id + '">' +
-          '<span class="pmark">' + (on ? '&#10003;' : '') + '</span>' + esc(p.name) +
+          '<span class="pmark">' + (on ? '&#10003;' : '') + '</span>' + avatarDot(p.name) + esc(p.name) +
           '<small class="num">Balance ' + fmt(p.balance) + '</small></button>';
       }).join('') + '</div>' +
       '<hr class="divider"><div class="inline-field"><label class="field" for="fee" style="margin:0">Entry fee per player</label>' +
-      '<input class="small num" id="fee" type="text" inputmode="decimal" data-fk="fee" data-bind="fee" value="' + esc(state.settings.entryFee) + '"></div>' +
-      '</section>';
+      '<input class="small num" id="fee" type="text" inputmode="decimal" data-fk="fee" data-bind="fee" value="' + esc(state.settings.entryFee) + '"></div>';
+    h += sect('players', 'Who is playing', sectCoin('players', c), playersBody);
 
     /* betting rounds */
-    h += '<section class="card"><h2>Betting rounds</h2>' +
-      '<p class="hint">Round 1: each player bets their own amount or folds. Extra rounds: the first player sets the raise and everyone else must add it too or fold.</p>';
+    var roundsBody = '<p class="hint">Round 1: each player bets their own amount or folds. Extra rounds: the first player sets the raise and everyone else must add at least that much or fold.</p>';
 
     /* Round 1 */
     var r0 = d.rounds[0], c0 = c.rounds[0];
-    h += '<div class="round"><h3>Round 1 &middot; after the first 2 cards</h3>' +
+    roundsBody += '<div class="round"><h3>Round 1 &middot; after the first 2 cards</h3>' +
       '<p class="hint">Bet your own amount, or fold and give up what you have paid so far.</p>';
-    if (!c0 || !c0.active.length) h += '<p class="hint" style="margin-top:8px">Nobody has bet yet.</p>';
+    if (!c0 || !c0.active.length) roundsBody += '<p class="hint" style="margin-top:8px">Nobody has bet yet.</p>';
     d.entrants.forEach(function (id) {
       if (!playerById(id)) return;
       var st = statusOf(r0, id, ''), folded = st === 'fold';
         var lastPaid = paidSoFarBefore(c, id, 0);
-      h += '<div class="pcard' + (folded ? ' folded' : '') + '"><span class="pname">' + esc(playerById(id).name) + '</span>';
+      roundsBody += '<div class="pcard' + (folded ? ' folded' : '') + '"><span class="pname">' + avatarDot(playerById(id).name) + esc(playerById(id).name) + '</span>';
       if (folded) {
-        h += '<span class="status">Folded &middot; loses ' + fmt(lastPaid) + '</span>' +
+        roundsBody += '<span class="status">Folded &middot; loses ' + fmt(lastPaid) + '</span>' +
           '<button class="fold-btn call" data-act="setStatus" data-r="0" data-id="' + id + '" data-v="fold">Undo</button>';
       } else {
-        h += '<div class="bets"><span class="paidlbl num">already in<br>' + fmt(lastPaid) + '</span>' +
+        roundsBody += '<div class="bets"><span class="paidlbl num">already in<br>' + fmt(lastPaid) + '</span>' +
           '<input class="num" type="text" inputmode="decimal" aria-label="' + esc(playerById(id).name) + ' first bet, leave blank for ' + fmt(money(state.settings.firstBet)) + '" ' +
           'placeholder="' + fmt(money(state.settings.firstBet)) + '" data-fk="bet:' + id + '" data-bind="bet:' + id + '" value="' + esc(r0.amount[id] === undefined ? '' : r0.amount[id]) + '">' +
           '<button class="fold-btn call' + (st !== 'fold' ? ' on' : '') + '" aria-pressed="' + (st !== 'fold') + '" data-act="setStatus" data-r="0" data-id="' + id + '" data-v="bet">Bet</button>' +
           '<button class="fold-btn fold" aria-pressed="false" data-act="setStatus" data-r="0" data-id="' + id + '" data-v="fold">Fold</button></div>';
       }
-      h += '</div>';
+      roundsBody += '</div>';
     });
-    h += '<p class="hint" style="margin-top:8px">Leave the amount blank for the default first bet of <strong class="num">' + fmt(money(state.settings.firstBet)) + '</strong> (change it in Players).</p>';
-    h += '</div>';
+    roundsBody += '<p class="hint" style="margin-top:8px">Leave the amount blank for the default first bet of <strong class="num">' + fmt(money(state.settings.firstBet)) + '</strong> (change it in Players).</p>';
+    roundsBody += '</div>';
 
     /* Raise rounds */
     for (var i = 1; i < d.rounds.length; i++) {
       var r = d.rounds[i], cr = c.rounds[i] || { active: [] };
       var stillIn = i ? (c.rounds[i - 1] ? c.rounds[i - 1].active : c.ents) : c.ents;
-      var raiserName = r.raiserId && playerById(r.raiserId) ? playerById(r.raiserId).name : '\u2013';
-      h += '<div class="round"><h3>Round ' + (i + 1) + ' &middot; extra card</h3>' +
+      roundsBody += '<div class="round"><h3>Round ' + (i + 1) + ' &middot; extra card</h3>' +
         '<p class="hint">The raiser sets the raise and pays it. Everyone else must add at least that much to stay in, or fold.</p>' +
         '<div class="raiser-row"><div class="grow"><label class="field" for="rais_' + i + '">Raiser (bets first)</label>' +
         '<select id="rais_' + i + '" data-fk="rais_' + i + '" data-bind="raiser:' + i + '">';
       var pool = stillIn.length ? stillIn : d.entrants;
       var chosen = pool.indexOf(r.raiserId) >= 0 ? r.raiserId : (pool.length ? pool[0] : '');
       pool.forEach(function (id) {
-        h += '<option value="' + id + '"' + (id === chosen ? ' selected' : '') + '>' + esc(playerById(id).name) + '</option>';
+        roundsBody += '<option value="' + id + '"' + (id === chosen ? ' selected' : '') + '>' + esc(playerById(id).name) + '</option>';
       });
-      if (!pool.length) h += '<option value="">\u2013 no one is in \u2013</option>';
-      h += '</select></div>' +
+      if (!pool.length) roundsBody += '<option value="">\u2013 no one is in \u2013</option>';
+      roundsBody += '</select></div>' +
         '<div><label class="field" for="raise_' + i + '">Raise</label>' +
         '<input class="num small" id="raise_' + i + '" type="text" inputmode="decimal" data-fk="raise:' + i + '" data-bind="raise:' + i + '" value="' + esc(r.raise) + '" style="width:96px"></div></div>';
 
-      // previous called amount for the escalating hint
-      var prev = d.rounds[i - 1];
-      var prevAmt = prev.type === 'bet'
-        ? Math.max.apply(null, d.entrants.map(function (id) {
-            var raw = prev.amount[id];
-            return (raw === undefined || raw === '') ? money(state.settings.firstBet) : money(raw);
-          }).concat([money(state.settings.firstBet)]))
-        : money(prev.raise);
-      var okRaise = money(r.raise) >= prevAmt;
-      h += '<p class="hint num" style="margin-top:6px">Previous round\u2019s highest bet: ' + fmt(prevAmt) +
-        '. This raise is ' + (okRaise ? 'at least that. Good.' : '<strong>below it — the raise should be higher.</strong>') + '</p>';
+      // strict escalating-raise hint (also enforced in compute/settle)
+      var prevAmt = prevHighestBet(i);
+      var raiseAmt = money(r.raise);
+      var okRaise = raiseAmt >= prevAmt;
+      var raisedUp = raiseAmt === prevAmt && d.rounds.length > 1;
+      roundsBody += '<p class="hint num" style="margin-top:6px">Must be higher than the last round\u2019s highest bet of <strong class="num">' + fmt(prevAmt) + '</strong>.' +
+        (okRaise ? (raisedUp ? ' This raise matches the highest \u2014 it should be raised up later.' : ' Good.') : '</p><p class="notice warn" style="margin-top:6px"><strong>Blocked:</strong> ' + fmt(raiseAmt) + ' is below the minimum. The settle button stays off until this is fixed \u2014 or tap \u201cAuto-fix raises\u201d below.</p>');
 
       if (!cr.active.length) {
-        h += '<p class="hint" style="margin-top:8px">No one is still in for this round. Remove the last round or start a new game.</p>';
+        roundsBody += '<p class="hint" style="margin-top:8px">No one is still in for this round. Remove the last round or start a new game.</p>';
       }
       stillIn.forEach(function (id) {
         var isR = id === chosen;
         if (isR) {
-          h += '<div class="pcard"><span class="pname">' + esc(playerById(id).name) +
+          roundsBody += '<div class="pcard"><span class="pname">' + avatarDot(playerById(id).name) + esc(playerById(id).name) +
             ' <span class="badge raisertag">Raiser</span></span>' +
             '<span class="status num">pays ' + fmt(money(r.raise)) + '</span></div>';
           return;
         }
         var st = statusOf(r, id, ''), folded = st === 'fold';
         var basePaid = paidSoFarBefore(c, id, i);
-        h += '<div class="pcard' + (folded ? ' folded' : '') + '"><span class="pname">' + esc(playerById(id).name) + '</span>';
+        var amtv = money(r.amount[id]), short = amtv > 0 && amtv < money(r.raise);
+        roundsBody += '<div class="pcard' + (folded ? ' folded' : '') + '"><span class="pname">' + avatarDot(playerById(id).name) + esc(playerById(id).name) + '</span>';
         if (folded) {
-          h += '<span class="status">Folded &middot; loses ' + fmt(r2(basePaid)) + '</span>' +
+          roundsBody += '<span class="status">Folded &middot; loses ' + fmt(r2(basePaid)) + '</span>' +
             '<button class="fold-btn call" data-act="setStatus" data-r="' + i + '" data-id="' + id + '" data-v="fold">Undo</button>';
         } else {
-          h += '<div class="bets"><span class="paidlbl num">already in<br>' + fmt(basePaid) + '</span>' +
-            '<input class="num" type="text" inputmode="decimal" aria-label="' + esc(playerById(id).name) + ' added amount, at least ' + fmt(money(r.raise)) + '" ' +
+          roundsBody += '<div class="bets"><span class="paidlbl num">already in<br>' + fmt(basePaid) + '</span>' +
+            '<input class="num' + (short ? ' short' : '') + '" type="text" inputmode="decimal" aria-label="' + esc(playerById(id).name) + ' added amount, at least ' + fmt(money(r.raise)) + '" ' +
             'placeholder="&ge; ' + fmt(money(r.raise)) + '" data-fk="amt:' + i + ':' + id + '" data-bind="amount:' + i + ':' + id + '" value="' + esc(r.amount[id] || '') + '">' +
             '<button class="fold-btn fold" aria-pressed="false" data-act="setStatus" data-r="' + i + '" data-id="' + id + '" data-v="fold">Fold</button></div>';
         }
-        h += '</div>';
+        roundsBody += '</div>';
       });
-      h += '</div>';
+      roundsBody += '</div>';
     }
 
     var canAdd = c.active.length > 1;
-    h += '<div class="row wrap-r" style="margin-top:12px">' +
+    roundsBody += '<div class="row wrap-r" style="margin-top:12px">' +
       '<button class="btn" data-act="addRound"' + (canAdd ? '' : ' disabled') + '>+ Add extra-card round</button>' +
       (d.rounds.length > 1 ? '<button class="btn ghost" data-act="removeRound">Remove last round</button>' : '') +
-      '</div></section>';
+      (c.violations.length ? '<button class="btn" data-act="fixRaises">Auto-fix raises</button>' : '') +
+      '</div>';
+    if (c.violations.length) {
+      roundsBody += '<p class="notice warn" style="margin-top:10px"><strong>' + c.violations.length + ' bet breaks the rule:</strong></p>' +
+        c.violations.map(function (v) { return '<p class="hint" style="margin-top:4px">\u2022 ' + esc(v) + '</p>'; }).join('');
+    }
+    h += sect('rounds', 'Betting rounds', sectCoin('rounds', c), roundsBody);
 
     /* final hands */
-    h += '<section class="card"><h2>Final hands</h2>';
+    var handsBody = '';
     if (c.ents.length < 2) {
-      h += '<p class="hint">Pick at least 2 players to start.</p>';
+      handsBody += '<p class="hint">Pick at least 2 players to start.</p>';
     } else if (!c.active.length) {
-      h += '<p class="hint">Everyone is out. Nothing to enter.</p>';
+      handsBody += '<p class="hint">Everyone is out. Nothing to enter.</p>';
     } else if (c.active.length === 1) {
-      h += '<p class="hint">Only ' + esc(playerById(c.active[0]).name) + ' is still in, so they win the pot without showing a hand.</p>';
+      handsBody += '<p class="hint">Only ' + esc(playerById(c.active[0]).name) + ' is still in, so they win the pot without showing a hand.</p>';
     } else {
-      h += '<p class="hint">Enter each remaining player\u2019s card total. Over 21 is a bust.</p>';
+      handsBody += '<p class="hint">Enter each remaining player\u2019s card total. Over 21 is a bust.</p>';
       c.active.forEach(function (id) {
         var v = c.vals[id], raw = d.hands[id] === undefined ? '' : d.hands[id];
-        h += '<div class="pcard"><span class="pname">' + esc(playerById(id).name) + (v !== null && v > 21 ? ' <span class="badge bust">Bust</span>' : '') + '</span>' +
+        handsBody += '<div class="pcard"><span class="pname">' + avatarDot(playerById(id).name) + esc(playerById(id).name) + (v !== null && v > 21 ? ' <span class="badge bust">Bust</span>' : '') + '</span>' +
           '<input class="small num" type="text" inputmode="numeric" aria-label="' + esc(playerById(id).name) + ' hand total" data-fk="hand:' + id + '" data-bind="hand:' + id + '" value="' + esc(raw) + '" placeholder="Total"></div>';
       });
     }
-    h += '</section>';
+    h += sect('hands', 'Final hands', sectCoin('hands', c), handsBody);
 
     /* result */
-    h += '<section class="card"><h2>Result</h2><div class="stack" style="margin-top:10px">';
     var msg = '', kind = '';
     if (c.status === 'need-players') { msg = 'Pick at least 2 players to see the result.'; }
     else if (c.status === 'incomplete') { msg = 'Everyone still in needs a hand total. The pot so far is ' + fmt(c.pot) + '.'; }
@@ -732,10 +970,11 @@
       kind = 'good';
       if (c.carryOut > 0) msg += ' ' + fmt(c.carryOut) + ' left over carries forward.';
     }
-    h += '<p class="notice ' + kind + '">' + msg + '</p>';
+    var resultBody = '<div class="stack">' +
+      '<p class="notice ' + kind + '">' + msg + '</p>';
 
     if (c.ents.length) {
-      h += '<div class="scroll-x"><table><thead><tr><th>Player</th><th>Paid in</th><th>Hand</th><th>Net</th></tr></thead><tbody>';
+      resultBody += '<div class="scroll-x"><table><thead><tr><th>Player</th><th>Paid in</th><th>Hand</th><th>Net</th></tr></thead><tbody>';
       c.ents.forEach(function (id) {
         var p = playerById(id), v = c.vals[id], isW = c.winners.indexOf(id) >= 0;
         var hand = c.out[id] ? '<span class="badge">Out</span>'
@@ -743,26 +982,27 @@
           : v === null ? '<span class="zero">\u2013</span>'
           : v > 21 ? '<span class="badge bust">Bust ' + v + '</span>' : v;
         var after = r2(p.balance + c.net[id]);
-        var showNet = c.status === 'ok' || c.status === 'no-winner';
-        h += '<tr class="' + (isW ? 'winner' : '') + '"><td>' + esc(p.name) + (isW ? ' <span class="badge win">Winner</span>' : '') +
+        var showNet = (c.status === 'ok' || c.status === 'no-winner') && !c.violations.length;
+        resultBody += '<tr class="' + (isW ? 'winner' : '') + '"><td>' + esc(p.name) + (isW ? ' <span class="badge win">Winner</span>' : '') +
           (showNet && after < 0 ? '<span class="sub neg">Balance would be ' + fmt(after) + '. Needs a loan.</span>' : '') + '</td>' +
           '<td class="num">' + fmt(c.paid[id]) + '</td><td class="num">' + hand + '</td>' +
           '<td class="num ' + (showNet ? cls(c.net[id]) : 'zero') + '">' + (showNet ? sgn(c.net[id]) : '\u2013') +
           (showNet && c.payout[id] ? '<span class="sub">gets ' + fmt(c.payout[id]) + '</span>' : '') + '</td></tr>';
       });
-      h += '</tbody></table></div>';
+      resultBody += '</tbody></table></div>';
     }
-    var ready = c.status === 'ok' || c.status === 'no-winner';
-    h += '<button class="btn primary block" data-act="settle"' + (ready ? '' : ' disabled') + '>Settle game &amp; update balances</button>' +
+    var ready = (c.status === 'ok' || c.status === 'no-winner') && !c.violations.length;
+    resultBody += '<button class="btn primary block" data-act="settle"' + (ready ? '' : ' disabled') + ' title="' + esc(c.violations[0] || '') + '">Settle game &amp; update balances</button>' +
       '<div class="row between">' +
       '<button class="btn ghost" data-act="clearDraft">Clear this game</button>' +
       (state.undo ? '<button class="btn ghost" data-act="undo">Undo last settled game</button>' : '<span></span>') +
-      '</div></section>';
+      '</div></div>';
+    h += sect('result', 'Result', sectCoin('result', c), resultBody);
 
     h += '<section class="card"><details><summary>How a game is counted</summary><ul>' +
       '<li>Every player pays the same entry fee into the pot.</li>' +
       '<li>After seeing 2 cards, each player bets their own amount or folds. Folding gives up everything paid so far.</li>' +
-      '<li>In an extra round the first player (the raiser) sets the raise; every other player adds at least that much or folds, and the raise should be higher than the previous raise.</li>' +
+      '<li>In an extra round the first player (the raiser) sets the raise; every other player adds at least that much or folds, and the raise must be higher than the previous raise — lower raises are clamped or blocked by the app.</li>' +
       '<li>The highest total of 21 or less wins the pot. A tie splits it equally.</li>' +
       '<li>If one player is left, they win. If everyone is out or bust, the pot carries to the next game.</li>' +
       '<li>Net is what a player gets back minus everything they paid in.</li></ul></details></section>';
@@ -787,7 +1027,9 @@
       '<div class="inline-field" style="margin-top:10px"><label class="field" for="start" style="margin:0">Starting balance for new players</label>' +
       '<input class="small num" id="start" type="text" inputmode="decimal" data-fk="start" data-bind="start" value="' + esc(s.start) + '"></div>' +
       '<div class="inline-field" style="margin-top:10px"><label class="field" for="firstBet" style="margin:0">Default first bet (when left blank)</label>' +
-      '<input class="small num" id="firstBet" type="text" inputmode="decimal" data-fk="firstBet" data-bind="firstBet" value="' + esc(s.firstBet) + '"></div></section>';
+      '<input class="small num" id="firstBet" type="text" inputmode="decimal" data-fk="firstBet" data-bind="firstBet" value="' + esc(s.firstBet) + '"></div>' +
+      '<div class="inline-field" style="margin-top:10px"><label class="field" for="cur" style="margin:0">Currency symbol (optional)</label>' +
+      '<input class="small" id="cur" type="text" maxlength="3" data-fk="cur" data-bind="cur" value="' + esc(s.cur) + '"></div></section>';
 
     h += '<section class="card"><h2>Loan terms</h2><p class="hint">Interest is added to every open loan each time a game is settled. Changes apply to new loans only.</p>' +
       '<div class="stack" style="margin-top:12px">' +
@@ -805,7 +1047,7 @@
     var sorted = state.players.slice().sort(function (a, b) { return (b.balance - debtOf(b)) - (a.balance - debtOf(a)); });
     sorted.forEach(function (p) {
       var debt = debtOf(p), worth = r2(p.balance - debt), key = 'rm:' + p.id;
-      h += '<section class="card"><div class="row between"><h2>' + esc(p.name) + '</h2>' +
+      h += '<section class="card"><div class="row between"><h2>' + avatarDot(p.name) + esc(p.name) + '</h2>' +
         '<button class="btn ghost danger" data-act="removePlayer" data-id="' + p.id + '" style="min-height:40px;padding:2px 10px">' + (ui.confirm === key ? 'Tap again to remove' : 'Remove') + '</button></div>' +
         '<div class="stats"><div class="stat"><div class="k">Balance</div><div class="v num ' + (p.balance < 0 ? 'neg' : '') + '">' + fmt(p.balance) + '</div></div>' +
         '<div class="stat"><div class="k">Owes</div><div class="v num ' + (debt > 0 ? 'neg' : '') + '">' + fmt(debt) + '</div></div>' +
@@ -823,6 +1065,10 @@
 
     h += '<div style="margin-top:16px"><button class="btn danger block" data-act="resetAll">' +
       (ui.confirm === 'reset' ? 'Tap again to erase all players, loans and history' : 'Reset everything') + '</button></div>';
+
+    h += '<section class="card"><h2>Self-test</h2><p class="hint">Runs 200 random games through the same engine the table uses and checks the money always balances: entry fees + bets + carried pot = payouts + carry-out. Also checks that the right players win and that balances move by exactly their net. Your ledger is restored afterwards \u2014 nothing is kept.</p>' +
+      '<button class="btn block" data-act="selfTest">Run 200 random games</button>' +
+      '<pre id="testOut" class="testout">Not run yet.</pre></section>';
     return h;
   }
 
@@ -888,6 +1134,7 @@
     if (k === 'fee') state.settings.entryFee = t.value;
     else if (k === 'start') state.settings.start = t.value;
     else if (k === 'firstBet') state.settings.firstBet = t.value;
+    else if (k === 'cur') state.settings.cur = t.value;
     else if (k === 'rate') state.settings.rate = t.value;
     else if (k === 'type') state.settings.type = t.value;
     else if (k === 'raiser') state.draft.rounds[+id].raiserId = t.value;
@@ -900,6 +1147,25 @@
     }
     save();
     render();
+  });
+
+  // strict clamp on blur: a typed raise / call below the rule minimum snaps up to it
+  app.addEventListener('change', function (e) {
+    var t = e.target, b = t.dataset ? t.dataset.bind : null;
+    if (!b) return;
+    var parts = b.split(':'), k = parts[0];
+    if (k !== 'raise' && k !== 'amount') return;
+    var idx = +parts[1];
+    var r = state.draft.rounds[idx];
+    if (!r) return;
+    var mn = (k === 'raise') ? prevHighestBet(idx) : money(r.raise);
+    var v = money(t.value);
+    if (v < mn) {
+      if (k === 'raise') state.draft.rounds[idx].raise = String(mn);
+      else state.draft.rounds[idx].amount[parts[2]] = String(mn);
+      toast('Minimum for this is ' + fmt(mn) + ' \u2014 adjusted.');
+      commit();
+    }
   });
 
   nav.addEventListener('click', function (e) {
@@ -915,7 +1181,39 @@
     if (t.id === 'newName') { actions.addPlayer({}); ui.confirm = ''; commit(); }
   });
 
+  // remember which Table sections are open (toggle does not bubble, so capture)
+  app.addEventListener('toggle', function (e) {
+    var key = e.target.dataset ? e.target.dataset.sect : null;
+    if (!key || !state.view) return;
+    state.view.sections[key] = e.target.open;
+    save();
+  }, true);
+
+  /* Deterministic colour per player, reused everywhere a name shows up */
+  function hueOf(name) {
+    var h = 0;
+    for (var i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360;
+    return h;
+  }
+  function avatarDot(name) {
+    var ini = String(name).trim().slice(0, 1).toUpperCase();
+    return '<span class="avatar" style="background:hsl(' + hueOf(String(name)) + ',52%,38%)">' + esc(ini) + '</span>';
+  }
+
+  /* Engine access for the self-test and console tinkering */
+  window.Ledger = {
+    fresh: defaultState,
+    replaceState: function (s) { state = s; },
+    snapshot: function () { return JSON.stringify(state); },
+    restore: function (snap) { state = JSON.parse(snap); },
+    compute: compute,
+    settle: settle,
+    newRound: newRound,
+    runSelfTest: runSelfTest
+  };
+
   render();
+  if (location.hash === '#selftest') { state.tab = 'players'; render(); runSelfTest(); }
 })();
 </script>
 </body>
